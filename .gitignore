@@ -1,0 +1,4 @@
+**/node_modules/**
+**/.env
+rand_info.txt
+.vscode/
