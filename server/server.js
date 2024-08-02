@@ -4,6 +4,8 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const helmet = require('helmet');
+const { WebSocketServer, WebSocket } = require('ws');
+const rateLimit = require("ws-rate-limit");
 
 
 const app = express();
@@ -49,6 +51,103 @@ app.use('/game', (req, res) => {
 */
 
 const server = http.createServer(app);
+let wss = new WebSocketServer({server, maxPayload: 1024 * 4});
+const wsClients = {};
+const wsSubscribers = {
+  newToken: [],
+  local: []
+};
+
+let myRateLimit = rateLimit("1s", 8);
+function heartbeat() {
+  this.isAlive = true;
+}
+let addressToClientMap = {};
+let rateLimitOffenses = {};
+let rateLimitMsgSizeOffenses = {};
+wss.on('connection', function connection(ws, req){
+    console.log("connected")
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    ws.ip_address = ip;
+    if(!addressToClientMap.hasOwnProperty(ip)){
+      addressToClientMap[ip] = 0;
+    }
+    addressToClientMap[ip]++;
+    if(addressToClientMap[ip] > 3){
+      addressToClientMap[ip]--;
+      console.log("too many ws connections" + ip);
+      if(!rateLimitOffenses.hasOwnProperty(ip)){
+        rateLimitOffenses[ip] = 0;
+      }
+      rateLimitOffenses[ip]++;
+      if (rateLimitOffenses[ip] > 15){
+        banIP(ip);
+      } else {
+          setTimeout(()=>{
+            if(rateLimitOffenses[ip] > 0){
+              rateLimitOffenses[ip]--;
+            }
+          }, 1000 * 60 * 15);
+      }
+      ws.terminate();
+      return;
+    } else {
+      // setTimeout(()=>{
+      //   if(addressToClientMap[ip] > 0){
+      //     addressToClientMap[ip]--;
+      //   }
+      // }, 1000 * 60 * 5);
+    }
+    myRateLimit(ws);
+    ws.on('limited', data => {
+      console.log("limited" + ip);
+    })
+    ws.on('pong', heartbeat);
+    ws.id = crypto.randomUUID();
+    wsClients[ws.id] = ws;
+    ws.on('error', (e)=>{
+      console.error(`WS message exceeded max size. IP: ${ws.ip_address} Time: ${Date.now()}`);
+      if(!rateLimitMsgSizeOffenses.hasOwnProperty(ws.ip_address)){
+        rateLimitMsgSizeOffenses[ws.ip_address] = 0;
+      }
+      rateLimitMsgSizeOffenses[ws.ip_address]++;
+      if (rateLimitMsgSizeOffenses[ws.ip_address] > 35){
+        banIP(ws.ip_address);
+      }
+    });
+    ws.on('close', function close(message){
+      if(addressToClientMap[ip] > 0){
+        addressToClientMap[ip]--;
+      }
+    })
+    ws.on('message', function message(data, isBinary){
+        wss.clients.forEach(function each(client) {
+            if (client.readyState === WebSocket.OPEN) {
+            client.send(data, { binary: isBinary });
+            }
+        });
+      const message = isBinary ? data : data.toString();
+      console.log(message);
+    })
+  });
+  const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+      if (ws.isAlive === false) {
+        let ip = ws.ip_address;
+        if(addressToClientMap[ip] > 0){
+          addressToClientMap[ip]--;
+        }
+        return ws.terminate()
+      };
+  
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 25000);
+  
+  wss.on('close', function close() {
+    clearInterval(interval);
+  });
 
 
 

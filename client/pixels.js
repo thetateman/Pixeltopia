@@ -38,21 +38,24 @@ for(let i = 0; i<60; i++){
 }
 canvas.addEventListener('mousedown', (e)=>{
     window.dragging = true;
-    ctx.fillStyle = window.currentColor ?? "black";
     console.log(`X: ${e.x}, Y: ${e.y}`);
     // window.
     // document.onmousemove = elementDrag;
     
-  
-
-    //ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const pixelClicked = {
+      const pixelClicked = {
         x: Math.trunc((e.x  - widthOffset) / pixelSize), 
-        y: Math.trunc((e.y  - heightOffset) / pixelSize)
+        y: Math.trunc((e.y  - heightOffset) / pixelSize),
+        color: window.currentColor ?? "black"
     };
     console.log(pixelClicked);
-    ctx.fillRect(pixelSize * pixelClicked.x, pixelSize * pixelClicked.y, pixelSize, pixelSize);
+    window.wsConnection.send(JSON.stringify(pixelClicked))
+    fillPixel(pixelClicked.x, pixelClicked.y, window.currentColor ?? "black");
 })
+
+function fillPixel(x, y, color){
+    ctx.fillStyle = color;
+    ctx.fillRect(pixelSize * x, pixelSize * y, pixelSize, pixelSize);
+}
 
 const colorPicker = document.getElementById("color-picker");
 colorPicker.addEventListener("input", watchColorPicker, false);
@@ -60,47 +63,31 @@ colorPicker.addEventListener("input", watchColorPicker, false);
 function watchColorPicker(event) {
   window.currentColor = event.target.value;
 }
+function connect(){
 
-// Make the DIV element draggable:
-// dragElement(document.getElementById("mydiv"));
+    let wsServer = window.location.href.includes("localhost") ? `ws://localhost:8080` : "wss://pixeltopia.fun"
+    const ws = new WebSocket(wsServer);
+    window.wsConnection = ws;
 
-// function dragElement(elmnt) {
-//   var pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-//   if (document.getElementById(elmnt.id + "header")) {
-//     // if present, the header is where you move the DIV from:
-//     document.getElementById(elmnt.id + "header").onmousedown = dragMouseDown;
-//   } else {
-//     // otherwise, move the DIV from anywhere inside the DIV:
-//     elmnt.onmousedown = dragMouseDown;
-//   }
 
-//   function dragMouseDown(e) {
-//     e = e || window.event;
-//     e.preventDefault();
-//     // get the mouse cursor position at startup:
-//     pos3 = e.clientX;
-//     pos4 = e.clientY;
-//     document.onmouseup = closeDragElement;
-//     // call a function whenever the cursor moves:
-//     document.onmousemove = elementDrag;
-//   }
+    ws.addEventListener('error', (e)=>console.log(e));
+    ws.addEventListener('close', function close(e) {
+        console.log('disconnected');
+        console.log(e);
+        console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+        setTimeout(function() {
+        connect();
+        }, 1000);
+    });
 
-//   function elementDrag(e) {
-//     e = e || window.event;
-//     e.preventDefault();
-//     // calculate the new cursor position:
-//     pos1 = pos3 - e.clientX;
-//     pos2 = pos4 - e.clientY;
-//     pos3 = e.clientX;
-//     pos4 = e.clientY;
-//     // set the element's new position:
-//     elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-//     elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
-//   }
+    ws.addEventListener('open', function open() {
+        console.log("opened websocket connection")
+    });
 
-//   function closeDragElement() {
-//     // stop moving when mouse button is released:
-//     document.onmouseup = null;
-//     document.onmousemove = null;
-//   }
-// }
+    ws.addEventListener('message', function message(data) {
+        console.log(data.data);
+        const filledPixel = JSON.parse(data.data);
+        fillPixel(filledPixel.x, filledPixel.y, filledPixel.color);
+    });
+}
+connect();
