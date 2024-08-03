@@ -50,6 +50,17 @@ app.use('/game', (req, res) => {
 });
 */
 
+let board = [];
+for(let i = 0; i < 100; i++){
+    board.push([]);
+    for(let j = 0; j < 60; j++){
+        board[i].push("");
+    }
+}
+app.use("/board", async (req, res)=>{
+    res.json(board);
+  });
+
 const server = http.createServer(app);
 let wss = new WebSocketServer({server, maxPayload: 1024 * 4});
 const wsClients = {};
@@ -127,7 +138,9 @@ wss.on('connection', function connection(ws, req){
             }
         });
       const message = isBinary ? data : data.toString();
-      console.log(message);
+      const pixelClicked = JSON.parse(message);
+      //console.log(message);
+      board[pixelClicked.x][pixelClicked.y] = pixelClicked.color;
     })
   });
   const interval = setInterval(function ping() {
