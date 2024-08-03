@@ -100,3 +100,16 @@ function resize() {
 }
 resize();
 window.onresize = resize;
+
+fetch("/board").then((response)=>{
+    response.json().then((data)=>{
+        console.log(data);
+        for(let i = 0; i < 99; i++){
+            for(let j = 0; j < 59; j++){
+                if(data[i][j] !== ""){
+                    fillPixel(i, j, data[i][j]);
+                }
+            }
+        }
+    })
+})

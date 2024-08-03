@@ -140,6 +140,9 @@ wss.on("connection", function connection(ws, req) {
       }
     });
     const message = isBinary ? data : data.toString();
+    const pixelClicked = JSON.parse(message);
+      //console.log(message);
+      board[pixelClicked.x][pixelClicked.y] = pixelClicked.color;
     console.log(message);
   });
 });
